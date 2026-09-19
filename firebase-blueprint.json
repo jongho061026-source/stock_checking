@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "MarketItem": {
+      "title": "MarketItem",
+      "description": "기숙사 플리마켓 물품 정보 및 실시간 재고",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "물품 고유 ID",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "description": "물품 이름",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "category": {
+          "type": "string",
+          "description": "카테고리 구분",
+          "enum": ["living", "appliances", "furniture"]
+        },
+        "price": {
+          "type": "number",
+          "description": "판매 가격 (원 단위)"
+        },
+        "originalPrice": {
+          "type": "number",
+          "description": "정가 또는 원가"
+        },
+        "stock": {
+          "type": "number",
+          "description": "현재 잔여 재고 수량"
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "물품 대표 사진 URL",
+          "maxLength": 1000
+        },
+        "condition": {
+          "type": "string",
+          "description": "물품 상태 및 사용감",
+          "maxLength": 200
+        },
+        "usedPeriod": {
+          "type": "string",
+          "description": "사용 기간",
+          "maxLength": 100
+        },
+        "size": {
+          "type": "string",
+          "description": "물품 규격 및 크기",
+          "maxLength": 100
+        },
+        "components": {
+          "type": "string",
+          "description": "포함된 구성품",
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "description": "상세 설명",
+          "maxLength": 1000
+        },
+        "locationTag": {
+          "type": "string",
+          "description": "진열 위치 또는 수령 구역 태그",
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "등록 일시",
+          "maxLength": 50
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "수정 일시",
+          "maxLength": 50
+        }
+      },
+      "required": ["name", "category", "price", "stock", "imageUrl", "condition"]
+    }
+  },
+  "firestore": {
+    "/items/{itemId}": {
+      "schema": "#/entities/MarketItem",
+      "description": "기숙사 플리마켓 등록 상품 및 실시간 잔여 재고 목록"
+    }
+  }
+}

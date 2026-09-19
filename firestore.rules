@@ -1,0 +1,58 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Connection validation document
+    match /test/connection {
+      allow read: if true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidMarketItem(data) {
+      return data.keys().hasAll(['name', 'category', 'price', 'stock', 'imageUrl', 'condition']) &&
+        data.keys().hasOnly([
+          'id', 'name', 'category', 'price', 'originalPrice',
+          'stock', 'imageUrl', 'condition', 'usedPeriod',
+          'size', 'components', 'description', 'locationTag',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        (data.category == 'living' || data.category == 'appliances' || data.category == 'furniture') &&
+        data.price is number && data.price >= 0 && data.price <= 10000000 &&
+        (!('originalPrice' in data) || (data.originalPrice is number && data.originalPrice >= 0 && data.originalPrice <= 10000000)) &&
+        data.stock is number && data.stock >= 0 && data.stock <= 1000 &&
+        data.imageUrl is string && data.imageUrl.size() <= 1000 &&
+        data.condition is string && data.condition.size() <= 200 &&
+        (!('usedPeriod' in data) || (data.usedPeriod is string && data.usedPeriod.size() <= 100)) &&
+        (!('size' in data) || (data.size is string && data.size() <= 100)) &&
+        (!('components' in data) || (data.components is string && data.components.size() <= 200)) &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 1000)) &&
+        (!('locationTag' in data) || (data.locationTag is string && data.locationTag.size() <= 100)) &&
+        (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50)) &&
+        (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 50));
+    }
+
+    // Flea market items collection
+    match /items/{itemId} {
+      allow read: if true;
+      allow create: if isValidId(itemId) && isValidMarketItem(incoming());
+      allow update: if isValidId(itemId) && isValidMarketItem(incoming());
+      allow delete: if isValidId(itemId);
+    }
+  }
+}
