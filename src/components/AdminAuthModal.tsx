@@ -98,7 +98,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
                 운영자만 재고 수정 권한을 가질 수 있습니다.
               </p>
               <p className="text-[#556853] leading-relaxed">
-                학생들의 무분별한 재고 수량 변경을 방지하기 위해, 기숙사 자치회 및 현장 부스 관리자 비밀번호 입력이 필요합니다.
+                학생들의 무분별한 재고 수량 변경을 방지하기 위해, 현장 부스 및 플리마켓 관리자 비밀번호 입력이 필요합니다.
               </p>
             </div>
           </div>
@@ -155,7 +155,7 @@ export const AdminAuthModal: React.FC<AdminAuthModalProps> = ({
 
             {/* 보안 안내 문구 (비밀번호 노출 방지) */}
             <div className="p-2.5 rounded-lg bg-[#EAF5E7]/50 border border-[#3E9628]/20 text-[11px] text-[#556853] flex items-center justify-between">
-              <span>🔒 기숙사 자치회 및 현장 관리자 전용 인증 구역입니다.</span>
+              <span>🔒 플리마켓 현장 관리자 전용 인증 구역입니다.</span>
             </div>
 
             <div className="flex items-center gap-2 pt-2">

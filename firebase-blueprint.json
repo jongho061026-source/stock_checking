@@ -18,8 +18,18 @@
         },
         "category": {
           "type": "string",
-          "description": "카테고리 구분",
-          "enum": ["living", "appliances", "furniture"]
+          "description": "카테고리 구분 (책 또는 교재, 욕실용품, 생활용품, 주방용품, 문구류, 음식, 기타 등)",
+          "enum": [
+            "books",
+            "bathroom",
+            "living",
+            "kitchen",
+            "stationery",
+            "food",
+            "etc",
+            "appliances",
+            "furniture"
+          ]
         },
         "price": {
           "type": "number",
@@ -35,8 +45,8 @@
         },
         "imageUrl": {
           "type": "string",
-          "description": "물품 대표 사진 URL",
-          "maxLength": 1000
+          "description": "물품 대표 사진 URL 또는 압축 이미지 데이터",
+          "maxLength": 600000
         },
         "condition": {
           "type": "string",

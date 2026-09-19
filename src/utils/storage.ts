@@ -1,8 +1,7 @@
 import { MarketItem } from '../types';
-import { INITIAL_MARKET_ITEMS } from '../data/initialData';
 
-const STORAGE_KEY = 'dorm_market_inventory_v1';
-const LAST_UPDATED_KEY = 'dorm_market_last_updated_v1';
+const STORAGE_KEY = 'dorm_market_inventory_v2';
+const LAST_UPDATED_KEY = 'dorm_market_last_updated_v2';
 const ADMIN_PASSWORD_KEY = 'dorm_market_admin_password_v2';
 const DEFAULT_ADMIN_PASSWORD = '260918';
 
@@ -37,18 +36,23 @@ export function getStoredItems(): MarketItem[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_MARKET_ITEMS));
-      localStorage.setItem(LAST_UPDATED_KEY, new Date().toISOString());
-      return INITIAL_MARKET_ITEMS;
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+    if (Array.isArray(parsed)) {
+      // Filter out any legacy dummy mock items
+      return parsed.filter(
+        (item) =>
+          item &&
+          typeof item.id === 'string' &&
+          !item.id.startsWith('item-0') &&
+          !['item-10', 'item-11', 'item-12'].includes(item.id)
+      );
     }
-    return INITIAL_MARKET_ITEMS;
+    return [];
   } catch (err) {
     console.error('Failed to load stored inventory:', err);
-    return INITIAL_MARKET_ITEMS;
+    return [];
   }
 }
 
@@ -56,23 +60,26 @@ export function saveStoredItems(items: MarketItem[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     localStorage.setItem(LAST_UPDATED_KEY, new Date().toISOString());
-    // Dispatch a custom event so other components or tabs update immediately
     window.dispatchEvent(new Event('dorm_market_storage_changed'));
   } catch (err) {
     console.error('Failed to save inventory:', err);
   }
 }
 
-export function resetToInitialItems(): MarketItem[] {
+export function clearStoredItems(): MarketItem[] {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_MARKET_ITEMS));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
     localStorage.setItem(LAST_UPDATED_KEY, new Date().toISOString());
     window.dispatchEvent(new Event('dorm_market_storage_changed'));
-    return INITIAL_MARKET_ITEMS;
+    return [];
   } catch (err) {
-    console.error('Failed to reset inventory:', err);
-    return INITIAL_MARKET_ITEMS;
+    console.error('Failed to clear inventory:', err);
+    return [];
   }
+}
+
+export function resetToInitialItems(): MarketItem[] {
+  return clearStoredItems();
 }
 
 export function getLastUpdatedDate(): Date {

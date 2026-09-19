@@ -1,11 +1,11 @@
 import React from 'react';
 import { ItemCategory } from '../types';
-import { LayoutGrid, Home, Zap, Archive } from 'lucide-react';
+import { LayoutGrid, BookOpen, Bath, Home, Utensils, Pencil, Apple, MoreHorizontal } from 'lucide-react';
 
 interface CategoryFilterProps {
   selectedCategory: ItemCategory;
   onSelectCategory: (category: ItemCategory) => void;
-  categoryCounts: Record<ItemCategory, { total: number; available: number }>;
+  categoryCounts: Record<string, { total: number; available: number }>;
 }
 
 export const CategoryFilter: React.FC<CategoryFilterProps> = ({
@@ -20,19 +20,39 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
       icon: <LayoutGrid className="w-3.5 h-3.5" />,
     },
     {
+      id: 'books',
+      label: '책 또는 교재',
+      icon: <BookOpen className="w-3.5 h-3.5" />,
+    },
+    {
+      id: 'bathroom',
+      label: '욕실용품',
+      icon: <Bath className="w-3.5 h-3.5" />,
+    },
+    {
       id: 'living',
       label: '생활용품',
       icon: <Home className="w-3.5 h-3.5" />,
     },
     {
-      id: 'appliances',
-      label: '가전',
-      icon: <Zap className="w-3.5 h-3.5" />,
+      id: 'kitchen',
+      label: '주방용품',
+      icon: <Utensils className="w-3.5 h-3.5" />,
     },
     {
-      id: 'furniture',
-      label: '가구/수납',
-      icon: <Archive className="w-3.5 h-3.5" />,
+      id: 'stationery',
+      label: '문구류',
+      icon: <Pencil className="w-3.5 h-3.5" />,
+    },
+    {
+      id: 'food',
+      label: '음식',
+      icon: <Apple className="w-3.5 h-3.5" />,
+    },
+    {
+      id: 'etc',
+      label: '기타',
+      icon: <MoreHorizontal className="w-3.5 h-3.5" />,
     },
   ];
 

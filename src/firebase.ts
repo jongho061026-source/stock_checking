@@ -134,43 +134,9 @@ export function subscribeToItems(
   return unsubscribe;
 }
 
-// 5. Seed initial items if collection is empty
-export async function seedInitialItemsIfEmpty(initialItems: MarketItem[]): Promise<boolean> {
-  const itemsRef = collection(db, ITEMS_COLLECTION);
-  try {
-    const snapshot = await getDocs(itemsRef);
-    if (snapshot.empty) {
-      console.log('Firestore items collection is empty. Seeding initial flea market items...');
-      const batch = writeBatch(db);
-      for (const item of initialItems) {
-        const docRef = doc(db, ITEMS_COLLECTION, item.id);
-        batch.set(docRef, {
-          id: item.id,
-          name: item.name,
-          category: item.category,
-          price: item.price,
-          originalPrice: item.originalPrice || null,
-          stock: item.stock,
-          imageUrl: item.imageUrl,
-          condition: item.condition,
-          usedPeriod: item.usedPeriod,
-          size: item.size,
-          components: item.components,
-          description: item.description,
-          locationTag: item.locationTag,
-          createdAt: new Date().toISOString(),
-          updatedAt: item.updatedAt || new Date().toISOString().replace('T', ' ').slice(0, 16),
-        });
-      }
-      await batch.commit();
-      console.log('Successfully seeded initial items to Firestore.');
-      return true;
-    }
-    return false;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, ITEMS_COLLECTION);
-    return false;
-  }
+// 5. No auto-seeding of fake items: inventory strictly follows user-registered items in Firestore
+export async function seedInitialItemsIfEmpty(): Promise<boolean> {
+  return false;
 }
 
 // 6. Create a new market item
@@ -188,16 +154,16 @@ export async function addMarketItem(newItem: Omit<MarketItem, 'id'> & { id?: str
     category: newItem.category,
     price: Math.max(0, Math.min(10000000, Number(newItem.price) || 0)),
     stock: Math.max(0, Math.min(1000, Number(newItem.stock) || 0)),
-    imageUrl: (newItem.imageUrl || '').slice(0, 1000),
+    imageUrl: (newItem.imageUrl || '').slice(0, 500000),
     condition: (newItem.condition || '상').slice(0, 200),
     usedPeriod: (newItem.usedPeriod || '미기재').slice(0, 100),
     size: (newItem.size || '미기재').slice(0, 100),
-    components: (newItem.components || '본체').slice(0, 200),
     description: (newItem.description || '').slice(0, 1000),
-    locationTag: (newItem.locationTag || '현장 수령 구역').slice(0, 100),
     createdAt: new Date().toISOString().slice(0, 50),
     updatedAt: nowStr.slice(0, 50),
   };
+  if (newItem.components) payload.components = newItem.components.slice(0, 200);
+  if (newItem.locationTag) payload.locationTag = newItem.locationTag.slice(0, 100);
 
   if (newItem.originalPrice && newItem.originalPrice > 0) {
     payload.originalPrice = Math.min(10000000, Number(newItem.originalPrice));
@@ -224,48 +190,71 @@ export async function updateMarketItem(
     updatedAt: nowStr.slice(0, 50),
   };
 
-  if (updates.name !== undefined) payload.name = updates.name.trim().slice(0, 100);
+  if (updates.name !== undefined) payload.name = (updates.name || '').trim().slice(0, 100);
   if (updates.category !== undefined) payload.category = updates.category;
-  if (updates.price !== undefined) payload.price = Math.max(0, Math.min(10000000, Number(updates.price)));
-  if (updates.originalPrice !== undefined) payload.originalPrice = Math.min(10000000, Number(updates.originalPrice));
-  if (updates.stock !== undefined) payload.stock = Math.max(0, Math.min(1000, Number(updates.stock)));
-  if (updates.imageUrl !== undefined) payload.imageUrl = updates.imageUrl.slice(0, 1000);
-  if (updates.condition !== undefined) payload.condition = updates.condition.slice(0, 200);
-  if (updates.usedPeriod !== undefined) payload.usedPeriod = updates.usedPeriod.slice(0, 100);
-  if (updates.size !== undefined) payload.size = updates.size.slice(0, 100);
-  if (updates.components !== undefined) payload.components = updates.components.slice(0, 200);
-  if (updates.description !== undefined) payload.description = updates.description.slice(0, 1000);
-  if (updates.locationTag !== undefined) payload.locationTag = updates.locationTag.slice(0, 100);
+  if (updates.price !== undefined) payload.price = Math.max(0, Math.min(10000000, Number(updates.price) || 0));
+  if (updates.originalPrice !== undefined) {
+    payload.originalPrice = Math.min(10000000, Number(updates.originalPrice) || 0);
+  }
+  if (updates.stock !== undefined) payload.stock = Math.max(0, Math.min(1000, Number(updates.stock) || 0));
+  if (updates.imageUrl !== undefined) payload.imageUrl = (updates.imageUrl || '').slice(0, 500000);
+  if (updates.condition !== undefined) payload.condition = (updates.condition || '상').slice(0, 200);
+  if (updates.usedPeriod !== undefined) payload.usedPeriod = (updates.usedPeriod || '미기재').slice(0, 100);
+  if (updates.size !== undefined) payload.size = (updates.size || '미기재').slice(0, 100);
+  if (updates.components !== undefined) payload.components = (updates.components || '').slice(0, 200);
+  if (updates.description !== undefined) payload.description = (updates.description || '').slice(0, 1000);
+  if (updates.locationTag !== undefined) payload.locationTag = (updates.locationTag || '').slice(0, 100);
 
   try {
-    await updateDoc(docRef, payload);
+    // Using setDoc with merge: true ensures it succeeds even if document did not pre-exist in cloud
+    await setDoc(docRef, payload, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `${ITEMS_COLLECTION}/${id}`);
   }
 }
 
-// 8. Batch save multiple items stock & data
+// Quick helper to immediately update single item stock in Firestore
+export async function updateItemStock(id: string, newStock: number): Promise<void> {
+  const docRef = doc(db, ITEMS_COLLECTION, id);
+  const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 16);
+  try {
+    await setDoc(
+      docRef,
+      {
+        stock: Math.max(0, Math.min(1000, Math.floor(newStock))),
+        updatedAt: nowStr.slice(0, 50),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `${ITEMS_COLLECTION}/${id}`);
+  }
+}
+
+// 8. Batch save multiple items stock & data safely
 export async function batchSaveItems(items: MarketItem[]): Promise<void> {
   try {
     const batch = writeBatch(db);
     const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 16);
 
     for (const item of items) {
+      if (!item.id) continue;
       const docRef = doc(db, ITEMS_COLLECTION, item.id);
       const payload: Record<string, unknown> = {
-        name: item.name.slice(0, 100),
-        category: item.category,
-        price: Math.max(0, Math.min(10000000, Number(item.price))),
-        stock: Math.max(0, Math.min(1000, Number(item.stock))),
-        imageUrl: item.imageUrl.slice(0, 1000),
-        condition: item.condition.slice(0, 200),
+        id: item.id,
+        name: (item.name || '물품').slice(0, 100),
+        category: item.category || 'etc',
+        price: Math.max(0, Math.min(10000000, Number(item.price) || 0)),
+        stock: Math.max(0, Math.min(1000, Number(item.stock) || 0)),
+        imageUrl: (item.imageUrl || '').slice(0, 500000),
+        condition: (item.condition || '상').slice(0, 200),
         usedPeriod: (item.usedPeriod || '미기재').slice(0, 100),
         size: (item.size || '미기재').slice(0, 100),
-        components: (item.components || '본체').slice(0, 200),
         description: (item.description || '').slice(0, 1000),
-        locationTag: (item.locationTag || '현장 수령 구역').slice(0, 100),
         updatedAt: nowStr.slice(0, 50),
       };
+      if (item.components) payload.components = item.components.slice(0, 200);
+      if (item.locationTag) payload.locationTag = item.locationTag.slice(0, 100);
       if (item.originalPrice && item.originalPrice > 0) {
         payload.originalPrice = Math.min(10000000, Number(item.originalPrice));
       }
@@ -287,36 +276,21 @@ export async function deleteMarketItem(id: string): Promise<void> {
   }
 }
 
-// 10. Reset to default initial items in Firestore
-export async function resetFirestoreToDefault(defaultItems: MarketItem[]): Promise<void> {
+// 10. Clear all items from Firestore database
+export async function clearAllItemsFromFirestore(): Promise<void> {
   try {
     const snapshot = await getDocs(collection(db, ITEMS_COLLECTION));
     const batch = writeBatch(db);
     snapshot.forEach((docSnap) => {
       batch.delete(docSnap.ref);
     });
-    for (const item of defaultItems) {
-      const docRef = doc(db, ITEMS_COLLECTION, item.id);
-      batch.set(docRef, {
-        id: item.id,
-        name: item.name,
-        category: item.category,
-        price: item.price,
-        originalPrice: item.originalPrice || null,
-        stock: item.stock,
-        imageUrl: item.imageUrl,
-        condition: item.condition,
-        usedPeriod: item.usedPeriod,
-        size: item.size,
-        components: item.components,
-        description: item.description,
-        locationTag: item.locationTag,
-        createdAt: new Date().toISOString().slice(0, 50),
-        updatedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-      });
-    }
     await batch.commit();
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, ITEMS_COLLECTION);
+    handleFirestoreError(error, OperationType.DELETE, ITEMS_COLLECTION);
   }
+}
+
+// Deprecated alias for backwards compatibility
+export async function resetFirestoreToDefault(): Promise<void> {
+  await clearAllItemsFromFirestore();
 }

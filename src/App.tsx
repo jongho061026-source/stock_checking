@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { MarketItem, ItemCategory } from './types';
-import { getStoredItems, saveStoredItems, resetToInitialItems, getLastUpdatedDate } from './utils/storage';
-import { INITIAL_MARKET_ITEMS } from './data/initialData';
+import { getStoredItems, saveStoredItems, clearStoredItems, getLastUpdatedDate } from './utils/storage';
 import {
   subscribeToItems,
-  seedInitialItemsIfEmpty,
   batchSaveItems,
   deleteMarketItem,
-  resetFirestoreToDefault,
+  clearAllItemsFromFirestore,
 } from './firebase';
 import { Header } from './components/Header';
 import { CategoryFilter } from './components/CategoryFilter';
@@ -15,9 +13,8 @@ import { ItemCard } from './components/ItemCard';
 import { ItemDetailModal } from './components/ItemDetailModal';
 import { AdminInventoryView } from './components/AdminInventoryView';
 import { AdminAuthModal } from './components/AdminAuthModal';
-import { AddItemModal } from './components/AddItemModal';
 import { FooterInfo } from './components/FooterInfo';
-import { Sparkles, RefreshCw, CheckCircle2, PlusCircle, Database } from 'lucide-react';
+import { Sparkles, RefreshCw, CheckCircle2, Database, PackageSearch, ShieldCheck } from 'lucide-react';
 
 export default function App() {
   const [items, setItems] = useState<MarketItem[]>(() => getStoredItems());
@@ -32,29 +29,22 @@ export default function App() {
     }
   });
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
-  const [isUserAddItemOpen, setIsUserAddItemOpen] = useState<boolean>(false);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [refreshNotification, setRefreshNotification] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date>(() => getLastUpdatedDate());
 
-  // Initialize Firestore and attach real-time subscription
+  // Attach real-time subscription directly to Firestore backend
   useEffect(() => {
     let isMounted = true;
 
-    // Seed if empty
-    seedInitialItemsIfEmpty(INITIAL_MARKET_ITEMS).catch((err) => {
-      console.warn('Initial seeding notice:', err);
-    });
-
-    // Real-time listener for flea market items
+    // Real-time listener: strictly follows Firestore items (source of truth)
     const unsubscribe = subscribeToItems(
       (cloudItems) => {
         if (!isMounted) return;
-        if (cloudItems && cloudItems.length > 0) {
-          setItems(cloudItems);
-          saveStoredItems(cloudItems);
-        }
+        const validItems = cloudItems || [];
+        setItems(validItems);
+        saveStoredItems(validItems);
         setLastUpdated(new Date());
         setIsFirebaseConnected(true);
       },
@@ -106,21 +96,28 @@ export default function App() {
 
   // Statistics calculation for counts and notice badges
   const { categoryCounts, totalAvailable, totalSoldOut } = useMemo(() => {
-    const counts: Record<ItemCategory, { total: number; available: number }> = {
+    const counts: Record<string, { total: number; available: number }> = {
       all: { total: items.length, available: items.filter((i) => i.stock > 0).length },
-      living: {
-        total: items.filter((i) => i.category === 'living').length,
-        available: items.filter((i) => i.category === 'living' && i.stock > 0).length,
-      },
-      appliances: {
-        total: items.filter((i) => i.category === 'appliances').length,
-        available: items.filter((i) => i.category === 'appliances' && i.stock > 0).length,
-      },
-      furniture: {
-        total: items.filter((i) => i.category === 'furniture').length,
-        available: items.filter((i) => i.category === 'furniture' && i.stock > 0).length,
-      },
     };
+
+    const allCategoryKeys: ItemCategory[] = [
+      'books',
+      'bathroom',
+      'living',
+      'kitchen',
+      'stationery',
+      'food',
+      'etc',
+      'appliances',
+      'furniture',
+    ];
+
+    allCategoryKeys.forEach((catKey) => {
+      counts[catKey] = {
+        total: items.filter((i) => i.category === catKey).length,
+        available: items.filter((i) => i.category === catKey && i.stock > 0).length,
+      };
+    });
 
     const availableCount = items.filter((i) => i.stock > 0).length;
     const soldOutCount = items.length - availableCount;
@@ -133,28 +130,30 @@ export default function App() {
   }, [items]);
 
   // Admin save handler - writes to Firebase Firestore and local storage
-  const handleSaveAdminItems = async (updatedItems: MarketItem[]) => {
+  const handleSaveAdminItems = async (updatedItems: MarketItem[]): Promise<boolean> => {
     try {
       await batchSaveItems(updatedItems);
       saveStoredItems(updatedItems);
       setItems(updatedItems);
       setLastUpdated(new Date());
+      return true;
     } catch (err) {
       console.error('Failed to save to Firebase:', err);
       saveStoredItems(updatedItems);
       setItems(updatedItems);
+      return false;
     }
   };
 
-  // Admin reset handler - restores default items in Firestore
+  // Admin reset handler - clears all items in Firestore backend
   const handleResetAdminItems = async () => {
     try {
-      await resetFirestoreToDefault(INITIAL_MARKET_ITEMS);
-      const resetItems = resetToInitialItems();
-      setItems(resetItems);
+      await clearAllItemsFromFirestore();
+      clearStoredItems();
+      setItems([]);
       setLastUpdated(new Date());
     } catch (err) {
-      console.error('Failed to reset Firestore:', err);
+      console.error('Failed to clear Firestore:', err);
     }
   };
 
@@ -264,8 +263,8 @@ export default function App() {
                 <span className="font-bold text-sm text-[#1E2B1D]">실시간 잔여 재고 현황</span>
                 {isFirebaseConnected ? (
                   <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#2D801E] bg-[#EAF5E7] px-2 py-0.5 rounded-md border border-[#3E9628]/20">
-                    <Database className="w-3 h-3 text-[#3E9628]" />
-                    <span>Firebase DB 실시간 연동</span>
+                    <RefreshCw className="w-3 h-3 text-[#3E9628]" />
+                    <span>실시간 연동</span>
                   </span>
                 ) : (
                   <span className="text-xs text-[#556853] hidden sm:inline">• 100% 현장 즉시 반영</span>
@@ -280,16 +279,18 @@ export default function App() {
                     품절 {totalSoldOut}종
                   </span>
                 </div>
-                <button
-                  type="button"
-                  id="user-add-item-btn"
-                  onClick={() => setIsUserAddItemOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#3E9628] hover:bg-[#3E9628]/90 text-white shadow-xs transition-transform active:scale-95 cursor-pointer"
-                  title="기숙사 플리마켓에 실제 상품 올리기"
-                >
-                  <PlusCircle className="w-3.5 h-3.5" />
-                  <span>상품 올리기</span>
-                </button>
+                {isAdminAuthenticated && (
+                  <button
+                    type="button"
+                    id="admin-quick-inventory-btn"
+                    onClick={() => setIsAdminView(true)}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#3E9628] hover:bg-[#3E9628]/90 text-white shadow-xs transition-transform active:scale-95 cursor-pointer"
+                    title="관리자 재고 관리 모드로 이동"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>재고·상품 관리</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -311,7 +312,27 @@ export default function App() {
 
             {/* 물품 목록 영역 (그리드) */}
             <section id="market-items-grid" aria-label="기숙사 중고 물품 목록">
-              {filteredItems.length > 0 ? (
+              {items.length === 0 ? (
+                <div className="bg-white rounded-2xl p-8 sm:p-12 text-center border border-[#3E9628]/20 shadow-xs my-2">
+                  <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-[#EAF5E7] flex items-center justify-center text-[#3E9628]">
+                    <PackageSearch className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-base font-bold text-[#1E2B1D] mb-1">현재 등록된 물품이 없습니다</h3>
+                  <p className="text-xs sm:text-sm text-[#556853] max-w-md mx-auto mb-4 leading-relaxed">
+                    플리마켓에 등록된 물품이 없습니다.<br />
+                    현장 관리자가 물품을 등록하면 실시간으로 잔여 수량과 상세 정보가 표시됩니다.
+                  </p>
+                  <button
+                    type="button"
+                    id="empty-state-admin-btn"
+                    onClick={handleToggleAdminView}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-[#1E2B1D] bg-[#EAF5E7] hover:bg-[#3E9628]/20 border border-[#3E9628]/30 rounded-xl transition-transform active:scale-95 cursor-pointer shadow-xs"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-[#3E9628]" />
+                    <span>{isAdminAuthenticated ? '관리자 모드에서 상품 등록하기' : '관리자 로그인 (상품 등록)'}</span>
+                  </button>
+                </div>
+              ) : filteredItems.length > 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5 sm:gap-4">
                   {filteredItems.map((item) => (
                     <ItemCard
@@ -351,17 +372,6 @@ export default function App() {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         onSuccess={handleAuthSuccess}
-      />
-
-      {/* 품목에 실제 상품 올리기 모달 (사용자/학생용) */}
-      <AddItemModal
-        isOpen={isUserAddItemOpen}
-        onClose={() => setIsUserAddItemOpen(false)}
-        onItemAdded={(newItem) => {
-          setItems((prev) => [newItem, ...prev]);
-          setRefreshNotification(`"${newItem.name}" 물품이 등록되어 관리자와 학생들에게 실시간 반영됩니다.`);
-          setTimeout(() => setRefreshNotification(null), 3500);
-        }}
       />
     </div>
   );

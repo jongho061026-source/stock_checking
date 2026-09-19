@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MarketItem } from '../types';
+import { MarketItem, CATEGORY_LABELS } from '../types';
 import {
   Save,
   ArrowLeft,
@@ -18,13 +18,17 @@ import {
   PlusCircle,
   Trash2,
   CloudCheck,
+  Pencil,
+  Loader2,
 } from 'lucide-react';
 import { verifyAdminPassword, saveAdminPassword } from '../utils/storage';
 import { AddItemModal } from './AddItemModal';
+import { EditItemModal } from './EditItemModal';
+import { updateItemStock } from '../firebase';
 
 interface AdminInventoryViewProps {
   items: MarketItem[];
-  onSaveItems: (updatedItems: MarketItem[]) => void;
+  onSaveItems: (updatedItems: MarketItem[]) => Promise<boolean> | void;
   onResetItems: () => void;
   onDeleteItem?: (id: string) => void;
   onBackToUserView: () => void;
@@ -50,10 +54,26 @@ export const AdminInventoryView: React.FC<AdminInventoryViewProps> = ({
   }, [items]);
 
   const [saveToast, setSaveToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string>('재고 변경사항이 성공적으로 저장되었습니다.');
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
+
+  const [isSavingAll, setIsSavingAll] = useState(false);
+  const [savingRowId, setSavingRowId] = useState<string | null>(null);
+  const [savedRowId, setSavedRowId] = useState<string | null>(null);
+
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
+  const [itemToEdit, setItemToEdit] = useState<MarketItem | null>(null);
   const [adminCategoryFilter, setAdminCategoryFilter] = useState<string>('all');
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
+
+  // Check if an item in draft has unsaved changes compared to items
+  const isItemModified = (item: MarketItem) => {
+    const original = items.find((i) => i.id === item.id);
+    return original ? original.stock !== item.stock : false;
+  };
+
+  const modifiedCount = draftItems.filter(isItemModified).length;
 
   // Password change modal state
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
@@ -120,25 +140,97 @@ export const AdminInventoryView: React.FC<AdminInventoryViewProps> = ({
     );
   };
 
-  const handleMarkSoldOut = (id: string) => {
-    setDraftItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, stock: 0 } : item))
-    );
+  // Row-level instant save
+  const handleSaveSingleItem = async (item: MarketItem) => {
+    try {
+      setSavingRowId(item.id);
+      await updateItemStock(item.id, item.stock);
+      await onSaveItems(draftItems);
+      setSavedRowId(item.id);
+      setToastMessage(`'${item.name}' 재고(${item.stock}개)가 성공적으로 저장되었습니다!`);
+      setToastType('success');
+      setSaveToast(true);
+      setTimeout(() => {
+        setSavedRowId((prev) => (prev === item.id ? null : prev));
+        setSaveToast(false);
+      }, 2500);
+    } catch (err) {
+      console.error('Failed to save single item:', err);
+      setToastMessage('저장 중 오류가 발생했습니다. 다시 시도해 주세요.');
+      setToastType('error');
+      setSaveToast(true);
+      setTimeout(() => setSaveToast(false), 3000);
+    } finally {
+      setSavingRowId(null);
+    }
   };
 
-  const handleSaveAll = () => {
-    onSaveItems(draftItems);
-    setSaveToast(true);
-    setTimeout(() => {
-      setSaveToast(false);
-    }, 2800);
+  // Instant sold out: updates local draft and immediately syncs to Firestore
+  const handleMarkSoldOut = async (id: string) => {
+    const targetItem = draftItems.find((i) => i.id === id);
+    const itemName = targetItem?.name || '상품';
+
+    const updated = draftItems.map((item) =>
+      item.id === id ? { ...item, stock: 0 } : item
+    );
+    setDraftItems(updated);
+
+    try {
+      setSavingRowId(id);
+      await updateItemStock(id, 0);
+      await onSaveItems(updated);
+      setSavedRowId(id);
+      setToastMessage(`'${itemName}' 물품이 품절 처리 및 저장되었습니다.`);
+      setToastType('success');
+      setSaveToast(true);
+      setTimeout(() => {
+        setSaveToast(false);
+        setSavedRowId(null);
+      }, 2500);
+    } catch (err) {
+      console.error('Failed to mark sold out:', err);
+      setToastMessage('품절 저장 중 오류가 발생했습니다.');
+      setToastType('error');
+      setSaveToast(true);
+      setTimeout(() => setSaveToast(false), 3000);
+    } finally {
+      setSavingRowId(null);
+    }
+  };
+
+  // Batch save all
+  const handleSaveAll = async () => {
+    try {
+      setIsSavingAll(true);
+      const res = await onSaveItems(draftItems);
+      if (res === false) {
+        setToastMessage('클라우드 데이터베이스 저장에 실패했습니다. 다시 시도해 주세요.');
+        setToastType('error');
+      } else {
+        setToastMessage('모든 재고 변경사항이 데이터베이스에 안전하게 저장되었습니다!');
+        setToastType('success');
+      }
+      setSaveToast(true);
+      setTimeout(() => {
+        setSaveToast(false);
+      }, 3000);
+    } catch (err) {
+      console.error(err);
+      setToastMessage('저장 중 예기치 못한 오류가 발생했습니다.');
+      setToastType('error');
+      setSaveToast(true);
+      setTimeout(() => {
+        setSaveToast(false);
+      }, 3000);
+    } finally {
+      setIsSavingAll(false);
+    }
   };
 
   const handleReset = () => {
     onResetItems();
     setResetConfirmOpen(false);
-    // Reload draft from default items
-    setDraftItems(JSON.parse(JSON.stringify(items)));
+    setDraftItems([]);
   };
 
   const filteredItems = draftItems.filter((item) => {
@@ -204,10 +296,20 @@ export const AdminInventoryView: React.FC<AdminInventoryViewProps> = ({
             <button
               id="admin-save-top-btn"
               onClick={handleSaveAll}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs sm:text-sm bg-[#3E9628] hover:bg-[#3E9628]/90 text-white shadow-sm transition-transform active:scale-95 cursor-pointer"
+              disabled={isSavingAll}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs sm:text-sm bg-[#3E9628] hover:bg-[#3E9628]/90 text-white shadow-sm transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
             >
-              <Save className="w-4 h-4" />
-              <span>재고 저장</span>
+              {isSavingAll ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              <span>{isSavingAll ? '저장 중...' : '재고 저장'}</span>
+              {modifiedCount > 0 && !isSavingAll && (
+                <span className="ml-1 px-1.5 py-0.5 bg-amber-400 text-black text-[10px] font-black rounded-full">
+                  {modifiedCount}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -233,11 +335,19 @@ export const AdminInventoryView: React.FC<AdminInventoryViewProps> = ({
       {saveToast && (
         <div
           id="admin-save-success-toast"
-          className="mb-4 p-3.5 rounded-xl bg-[#1E2B1D] border border-[#3E9628]/50 text-white flex items-center justify-between text-xs sm:text-sm shadow-md animate-in fade-in"
+          className={`mb-4 p-3.5 rounded-xl border text-white flex items-center justify-between text-xs sm:text-sm shadow-md animate-in fade-in ${
+            toastType === 'error'
+              ? 'bg-rose-900/90 border-rose-500'
+              : 'bg-[#1E2B1D] border-[#3E9628]/50'
+          }`}
         >
           <div className="flex items-center gap-2 font-semibold">
-            <Check className="w-4 h-4 text-[#74C962] shrink-0" />
-            <span>재고 변경사항이 웹 페이지에 즉시 성공적으로 반영되었습니다!</span>
+            {toastType === 'error' ? (
+              <AlertCircle className="w-4 h-4 text-rose-300 shrink-0" />
+            ) : (
+              <Check className="w-4 h-4 text-[#74C962] shrink-0" />
+            )}
+            <span>{toastMessage}</span>
           </div>
           <button
             onClick={() => onBackToUserView()}
@@ -294,14 +404,17 @@ export const AdminInventoryView: React.FC<AdminInventoryViewProps> = ({
             <span>새 상품 등록 (품목 추가)</span>
           </button>
 
-          <button
-            id="admin-reset-defaults-btn"
-            onClick={() => setResetConfirmOpen(true)}
-            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs text-[#556853] hover:text-[#1E2B1D] bg-white border border-[#3E9628]/20 hover:bg-[#EAF5E7] rounded-lg transition-colors cursor-pointer shadow-xs"
-          >
-            <RotateCcw className="w-3.5 h-3.5 text-[#3E9628]" />
-            <span>기본 재고 복원</span>
-          </button>
+          {draftItems.length > 0 && (
+            <button
+              id="admin-reset-defaults-btn"
+              onClick={() => setResetConfirmOpen(true)}
+              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs text-rose-700 hover:text-rose-800 bg-white border border-rose-200 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shadow-xs"
+              title="데이터베이스의 등록 상품 전체 비우기"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+              <span>전체 비우기 (DB 초기화)</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -315,7 +428,7 @@ export const AdminInventoryView: React.FC<AdminInventoryViewProps> = ({
                 <th className="py-3 px-4">물품 정보</th>
                 <th className="py-3 px-3 w-28">판매 가격</th>
                 <th className="py-3 px-4 w-44">남은 개수 (수량 수정)</th>
-                <th className="py-3 px-3 w-36 text-center">관리 (품절 / 삭제)</th>
+                <th className="py-3 px-3 w-48 text-center">관리 (수정 / 품절 / 삭제)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#3E9628]/10">
@@ -347,7 +460,7 @@ export const AdminInventoryView: React.FC<AdminInventoryViewProps> = ({
                     <td className="py-3 px-4 align-middle">
                       <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#EAF5E7] text-[#2D801E] font-medium border border-[#3E9628]/20">
-                          {item.locationTag}
+                          {CATEGORY_LABELS[item.category] || item.category || '기타'}
                         </span>
                         {isSoldOut ? (
                           <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-[#1E2B1D] text-white">
@@ -415,22 +528,59 @@ export const AdminInventoryView: React.FC<AdminInventoryViewProps> = ({
                       </div>
                     </td>
 
-                    {/* 관리 버튼들: 품절 처리 & 품목 삭제 */}
+                    {/* 관리 버튼들: 개별 저장, 수정, 품절 처리 & 품목 삭제 */}
                     <td className="py-3 px-3 align-middle text-center">
-                      <div className="flex items-center justify-center gap-1.5">
+                      <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                        {/* 개별 행 즉시 저장 버튼 (수량 변경 시 적극 강조) */}
+                        <button
+                          type="button"
+                          id={`admin-row-save-btn-${item.id}`}
+                          onClick={() => handleSaveSingleItem(item)}
+                          disabled={savingRowId === item.id || isSavingAll}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs ${
+                            savedRowId === item.id
+                              ? 'bg-emerald-600 text-white border border-emerald-500'
+                              : isItemModified(item)
+                              ? 'bg-[#3E9628] hover:bg-[#3E9628]/90 text-white ring-2 ring-[#74C962]'
+                              : 'bg-white hover:bg-[#EAF5E7] text-[#2D801E] border border-[#3E9628]/30'
+                          }`}
+                          title={isItemModified(item) ? '변경된 수량 즉시 저장' : '현재 재고 저장'}
+                        >
+                          {savingRowId === item.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : savedRowId === item.id ? (
+                            <Check className="w-3 h-3 text-white" />
+                          ) : (
+                            <Save className="w-3 h-3" />
+                          )}
+                          <span>{savedRowId === item.id ? '저장됨' : '저장'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          id={`admin-edit-btn-${item.id}`}
+                          onClick={() => setItemToEdit(item)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-[#EAF5E7] text-[#2D801E] border border-[#3E9628]/30 hover:bg-[#3E9628]/20 transition-all cursor-pointer active:scale-95 shadow-xs"
+                          title="물품 정보 수정 (카테고리, 이름, 가격 등)"
+                        >
+                          <Pencil className="w-3 h-3" />
+                          <span>수정</span>
+                        </button>
+
                         <button
                           type="button"
                           id={`admin-soldout-btn-${item.id}`}
                           onClick={() => handleMarkSoldOut(item.id)}
-                          disabled={isSoldOut}
+                          disabled={isSoldOut || savingRowId === item.id}
                           className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                             isSoldOut
                               ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
                               : 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 active:scale-95'
                           }`}
+                          title="즉시 재고 0개 및 품절 처리"
                         >
                           <Ban className="w-3 h-3" />
-                          <span>{isSoldOut ? '품절' : '품절'}</span>
+                          <span>{isSoldOut ? '품절됨' : '품절'}</span>
                         </button>
 
                         <button
@@ -453,7 +603,16 @@ export const AdminInventoryView: React.FC<AdminInventoryViewProps> = ({
 
         {filteredItems.length === 0 && (
           <div className="py-12 text-center text-[#556853]">
-            해당 조건의 물품이 없습니다.
+            {draftItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-2">
+                <p className="font-bold text-sm text-[#1E2B1D]">현재 등록된 상품이 없습니다.</p>
+                <p className="text-xs text-[#556853]">
+                  상단의 [+ 새 상품 등록] 버튼을 눌러 첫 번째 물품을 데이터베이스에 등록해 보세요.
+                </p>
+              </div>
+            ) : (
+              '해당 조건의 물품이 없습니다.'
+            )}
           </div>
         )}
 
@@ -474,27 +633,32 @@ export const AdminInventoryView: React.FC<AdminInventoryViewProps> = ({
             <button
               id="admin-save-bottom-btn"
               onClick={handleSaveAll}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-5 py-2 text-xs sm:text-sm font-bold bg-[#3E9628] hover:bg-[#3E9628]/90 text-white rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer"
+              disabled={isSavingAll}
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-5 py-2 text-xs sm:text-sm font-bold bg-[#3E9628] hover:bg-[#3E9628]/90 text-white rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
             >
-              <Save className="w-4 h-4" />
-              <span>변경사항 전체 저장</span>
+              {isSavingAll ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              <span>{isSavingAll ? '저장 중...' : '변경사항 전체 저장'}</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* 기본 재고 복원 확인 모달 */}
+      {/* 전체 비우기 확인 모달 */}
       {resetConfirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1E2B1D]/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl border border-[#3E9628]/20 space-y-4">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl border border-rose-200 space-y-4">
             <div className="flex items-start gap-3">
-              <div className="p-2 rounded-xl bg-[#EAF5E7] text-[#3E9628] shrink-0 border border-[#3E9628]/20">
-                <AlertCircle className="w-5 h-5" />
+              <div className="p-2 rounded-xl bg-rose-50 text-rose-600 shrink-0 border border-rose-200">
+                <Trash2 className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="font-bold text-[#1E2B1D] text-sm">초기 재고로 복원하시겠습니까?</h3>
+                <h3 className="font-bold text-[#1E2B1D] text-sm">전체 상품을 비우시겠습니까?</h3>
                 <p className="text-xs text-[#556853] mt-1">
-                  테스트를 위해 변경한 모든 수량이 서비스 초기 기본 샘플 재고로 되돌아갑니다.
+                  데이터베이스에 등록된 모든 상품이 삭제되며 복구할 수 없습니다. 실제 업로드된 상품만 남기거나 완전히 초기화할 때 사용하세요.
                 </p>
               </div>
             </div>
@@ -510,7 +674,7 @@ export const AdminInventoryView: React.FC<AdminInventoryViewProps> = ({
                 onClick={handleReset}
                 className="px-3.5 py-1.5 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg cursor-pointer shadow-xs"
               >
-                복원 실행
+                전체 삭제 실행
               </button>
             </div>
           </div>
@@ -631,7 +795,7 @@ export const AdminInventoryView: React.FC<AdminInventoryViewProps> = ({
               <div>
                 <h3 className="font-bold text-[#1E2B1D] text-sm">해당 상품을 삭제하시겠습니까?</h3>
                 <p className="text-xs text-[#556853] mt-1">
-                  Firebase 데이터베이스에서 해당 물품이 완전히 삭제되며 복구할 수 없습니다.
+                  데이터베이스에서 해당 물품이 완전히 삭제되며 복구할 수 없습니다.
                 </p>
               </div>
             </div>
@@ -670,6 +834,18 @@ export const AdminInventoryView: React.FC<AdminInventoryViewProps> = ({
         onClose={() => setIsAddItemOpen(false)}
         onItemAdded={(newItem) => {
           setDraftItems((prev) => [newItem, ...prev]);
+        }}
+      />
+
+      {/* 물품 정보 수정 모달 (카테고리, 물품명, 가격, 사진 등) */}
+      <EditItemModal
+        isOpen={!!itemToEdit}
+        item={itemToEdit}
+        onClose={() => setItemToEdit(null)}
+        onItemUpdated={(updated) => {
+          setDraftItems((prev) =>
+            prev.map((it) => (it.id === updated.id ? updated : it))
+          );
         }}
       />
     </div>

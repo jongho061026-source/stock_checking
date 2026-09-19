@@ -65,7 +65,7 @@ export const FooterInfo: React.FC<FooterInfoProps> = ({ onOpenAdmin }) => {
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#556853] pt-2 px-1">
           <div className="flex items-center gap-1.5">
             <HeartHandshake className="w-4 h-4 text-[#3E9628]" />
-            <span>학생생활관 자치회 기증품 나눔 프로젝트 • 실시간 재고 연동 시스템</span>
+            <span>기숙사 플리마켓 실시간 재고 연동 시스템</span>
           </div>
 
           <button

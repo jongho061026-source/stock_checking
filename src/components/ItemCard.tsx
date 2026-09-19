@@ -1,6 +1,6 @@
 import React from 'react';
-import { MarketItem } from '../types';
-import { Tag, MapPin, ChevronRight, Ban } from 'lucide-react';
+import { MarketItem, CATEGORY_LABELS } from '../types';
+import { Tag, ChevronRight, Ban } from 'lucide-react';
 
 interface ItemCardProps {
   item: MarketItem;
@@ -11,11 +11,7 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect }) => {
   const isSoldOut = item.stock <= 0;
   const isUrgent = item.stock > 0 && item.stock <= 2;
 
-  const categoryBadgeLabel: Record<string, string> = {
-    living: '생활용품',
-    appliances: '가전',
-    furniture: '가구/수납',
-  };
+  const categoryName = CATEGORY_LABELS[item.category] || item.category || '기타';
 
   return (
     <article
@@ -47,7 +43,7 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect }) => {
         {/* 상단 카테고리 뱃지 */}
         <div className="absolute top-2.5 left-2.5">
           <span className="px-2 py-1 rounded-md text-[11px] font-semibold bg-[#1E2B1D]/80 text-white backdrop-blur-xs">
-            {categoryBadgeLabel[item.category] || '기타'}
+            {categoryName}
           </span>
         </div>
 
@@ -91,10 +87,10 @@ export const ItemCard: React.FC<ItemCardProps> = ({ item, onSelect }) => {
       {/* 물품 정보 영역 */}
       <div className="p-4 flex-1 flex flex-col justify-between">
         <div>
-          {/* 부스 내 보관 위치 */}
+          {/* 카테고리 태그 */}
           <div className="flex items-center gap-1 text-[11px] text-[#556853] mb-1">
-            <MapPin className="w-3 h-3 text-[#3E9628] shrink-0" />
-            <span className="truncate">{item.locationTag}</span>
+            <Tag className="w-3 h-3 text-[#3E9628] shrink-0" />
+            <span className="font-medium text-[#2D801E]">{categoryName}</span>
           </div>
 
           {/* 물품 이름 */}

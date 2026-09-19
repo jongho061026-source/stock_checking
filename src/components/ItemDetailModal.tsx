@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
-import { MarketItem } from '../types';
-import { X, CheckCircle2, AlertTriangle, Package, Calendar, Layers, Ruler, Sparkles, Ban } from 'lucide-react';
+import { MarketItem, CATEGORY_LABELS } from '../types';
+import { X, CheckCircle2, AlertTriangle, Package, Calendar, Ruler, Sparkles, Ban } from 'lucide-react';
 
 interface ItemDetailModalProps {
   item: MarketItem | null;
@@ -47,6 +47,9 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold px-2.5 py-0.5 rounded-md bg-[#1E2B1D] text-[#EAF5E7]">
               물품 상세 정보
+            </span>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-[#EAF5E7] text-[#2D801E] border border-[#3E9628]/25">
+              {CATEGORY_LABELS[item.category] || item.category || '기타'}
             </span>
             <span className="text-xs text-[#556853] font-mono">#{item.id}</span>
           </div>
@@ -127,7 +130,7 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                 <div>
                   <p className="font-semibold">이 물품은 현재 전량 소진되었습니다.</p>
                   <p className="text-rose-700 mt-0.5">
-                    퇴소생 기증 중고 물품 특성상 즉시 추가 입고 여부가 불확실하므로, 다른 카테고리 물품을 확인해 주세요.
+                    플리마켓 중고 물품 특성상 즉시 추가 입고 여부가 불확실하므로, 다른 카테고리 물품을 확인해 주세요.
                   </p>
                 </div>
               </div>
@@ -158,19 +161,11 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-start gap-2 bg-white p-2.5 rounded-lg border border-[#3E9628]/15">
+              <div className="flex items-start gap-2 bg-white p-2.5 rounded-lg border border-[#3E9628]/15 sm:col-span-2">
                 <Ruler className="w-4 h-4 text-[#3E9628] shrink-0 mt-0.5" />
                 <div>
                   <span className="text-[#556853] block text-[11px]">크기 / 규격</span>
                   <span className="font-medium text-[#1E2B1D]">{item.size}</span>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-2 bg-white p-2.5 rounded-lg border border-[#3E9628]/15">
-                <Layers className="w-4 h-4 text-[#3E9628] shrink-0 mt-0.5" />
-                <div>
-                  <span className="text-[#556853] block text-[11px]">포함 구성품</span>
-                  <span className="font-medium text-[#1E2B1D]">{item.components}</span>
                 </div>
               </div>
             </div>
@@ -189,15 +184,6 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
               실시간 재고 조회 안내
             </h3>
             <ul className="space-y-1.5 text-[#1E2B1D]/90 pl-1">
-              <li className="flex items-start gap-1.5">
-                <span className="text-[#3E9628] font-bold">•</span>
-                <span>
-                  <strong>물품 보관 구역:</strong>{' '}
-                  <span className="font-bold text-[#1E2B1D] bg-white border border-[#3E9628]/30 px-1.5 py-0.5 rounded">
-                    {item.locationTag}
-                  </span>
-                </span>
-              </li>
               <li className="flex items-start gap-1.5">
                 <span className="text-[#3E9628] font-bold">•</span>
                 <span>

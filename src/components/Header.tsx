@@ -40,7 +40,7 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </div>
             <p className="text-xs text-[#556853]">
-              퇴소생 기증 생활·가전·가구 실시간 잔여 수량 안내
+              기숙사 생활·가전·가구 실시간 잔여 수량 안내
             </p>
           </div>
         </div>

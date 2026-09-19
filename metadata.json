@@ -1,6 +1,6 @@
 {
   "name": "기숙사 플리마켓 재고 현황",
-  "description": "기숙사 입소생을 위한 퇴소생 기증·플리마켓 물품 실시간 잔여 수량 및 현장 재고 확인 서비스",
+  "description": "기숙사 입소생을 위한 플리마켓 물품 실시간 잔여 수량 및 현장 재고 확인 서비스",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
